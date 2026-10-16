@@ -7,6 +7,7 @@ each instance uses its own Spotify Developer app (Development Mode: owner needs 
 ## Commands
 
 ```bash
+dotnet tool restore              # once after clone (dotnet-ef)
 aspire run                       # run everything (Postgres, migrations, API, web) + dashboard
 dotnet build                     # build the solution (warnings are errors)
 dotnet test                      # TUnit tests; integration tests start the AppHost (needs Docker)

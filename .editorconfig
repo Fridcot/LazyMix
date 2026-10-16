@@ -40,6 +40,16 @@ csharp_style_prefer_switch_expression = true:suggestion
 csharp_prefer_braces = true:warning
 csharp_new_line_before_open_brace = all
 
+# Naming: constants PascalCase. Roslyn ranks rules by specificity, not file order; matching
+# the same accessibility as private_fields plus the const modifier makes this rule win.
+dotnet_naming_rule.constants_pascal_case.symbols = constants
+dotnet_naming_rule.constants_pascal_case.style = pascal_case
+dotnet_naming_rule.constants_pascal_case.severity = warning
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = private
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
 # Naming: private fields _camelCase
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case

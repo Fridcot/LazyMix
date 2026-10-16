@@ -18,7 +18,7 @@ with your own (free) Spotify Developer app.
 
 - **Backend:** .NET 10, ASP.NET Core minimal API, EF Core + PostgreSQL
 - **Orchestration:** [Aspire](https://aspire.dev) (local dev, telemetry dashboard, deployment manifests)
-- **Frontend:** React + TypeScript + Vite (PWA)
+- **Frontend:** React + TypeScript + Vite (installable PWA planned)
 - **Tests:** TUnit, Aspire integration testing
 
 ## Getting started
