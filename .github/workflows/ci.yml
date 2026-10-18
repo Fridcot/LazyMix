@@ -60,6 +60,15 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+      # The Aspire AppHost tests health-check the projects' HTTPS endpoints. Trust the
+      # ASP.NET Core development certificate and point OpenSSL (HttpClient on Linux) at it.
+      # SSL_CERT_DIR must already be set when trusting, or the tool reports partial trust
+      # and exits non-zero.
+      - run: |
+          set -euo pipefail
+          export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs"
+          echo "SSL_CERT_DIR=$SSL_CERT_DIR" >>"$GITHUB_ENV"
+          dotnet dev-certs https --trust
       - run: scripts/run-stack.sh dotnet ci
 
   frontend:
