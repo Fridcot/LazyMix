@@ -1,0 +1,11 @@
+[
+  {"name": "type:decision", "color": "5319e7", "description": "An ADR, a policy, or a measurement to decide something"},
+  {"name": "type:defect", "color": "d73a4a", "description": "Behavior differs from what is documented or intended"},
+  {"name": "type:docs", "color": "0075ca", "description": "Documentation only"},
+  {"name": "type:workflow", "color": "fbca04", "description": "Tooling, CI, scripts, agent instructions, skills"},
+  {"name": "type:feature", "color": "a2eeef", "description": "Everything else, refactoring included"},
+  {"name": "security", "color": "b60205", "description": "Needs a security review; AI review uses the stronger model"},
+  {"name": "blocked", "color": "000000", "description": "Waits on something outside the project"},
+  {"name": "agent:claude", "color": "d4c5f9", "description": "An agent session started this work"},
+  {"name": "ai-review", "color": "c2e0c6", "description": "Request an AI review of this pull request"}
+]

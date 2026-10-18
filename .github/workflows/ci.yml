@@ -1,0 +1,132 @@
+# CI for every pull request and every push to main. `Required CI` is the one status
+# check the main ruleset requires; it aggregates every other job, so adding a job never
+# means editing the ruleset.
+#
+# Which stacks run is decided by scripts/resolve-changed-stacks.sh — the same script
+# the local gates use — so a path list exists in scripts/workflow.conf and nowhere else.
+name: CI
+
+on:
+  pull_request:
+    # ready_for_review: drafts skip the stack jobs, so leaving draft must run them.
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      dotnet: ${{ steps.stacks.outputs.dotnet }}
+      frontend: ${{ steps.stacks.outputs.frontend }}
+      custom: ${{ steps.stacks.outputs.custom }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: stacks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          # A push that created the branch has no previous commit to compare with.
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            scripts/resolve-changed-stacks.sh --all --github-output
+          else
+            scripts/resolve-changed-stacks.sh --base "$BASE_SHA" --github-output
+          fi
+
+  dotnet:
+    name: .NET build, test, format
+    needs: detect
+    if: needs.detect.outputs.dotnet == 'true' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      # The Aspire AppHost tests health-check the projects' HTTPS endpoints. Trust the
+      # ASP.NET Core development certificate and point OpenSSL (HttpClient on Linux) at it.
+      # SSL_CERT_DIR must already be set when trusting, or the tool reports partial trust
+      # and exits non-zero.
+      - run: |
+          set -euo pipefail
+          export SSL_CERT_DIR="$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs"
+          echo "SSL_CERT_DIR=$SSL_CERT_DIR" >>"$GITHUB_ENV"
+          dotnet dev-certs https --trust
+      - run: scripts/run-stack.sh dotnet ci
+
+  frontend:
+    name: Frontend lint, test, build
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+      # Uncomment when WF_FRONTEND_PM=pnpm (corepack reads packageManager from package.json).
+      # - run: corepack enable
+      - run: scripts/run-stack.sh frontend ci
+
+  custom:
+    name: Custom checks
+    needs: detect
+    if: needs.detect.outputs.custom == 'true' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: scripts/run-stack.sh custom ci
+
+  contracts:
+    name: Workflow contracts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: scripts/check-workflow-contracts.sh
+
+  required:
+    name: Required CI
+    if: always()
+    needs: [detect, dotnet, frontend, custom, contracts]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          # detect and contracts must succeed; a stack job may be skipped when the change
+          # did not reach it.
+          echo "$RESULTS" | jq -e '
+            (.detect.result == "success") and (.contracts.result == "success")
+            and ([.dotnet.result, .frontend.result, .custom.result] | all(. == "success" or . == "skipped"))
+          ' >/dev/null || { echo "$RESULTS" | jq 'map_values(.result)'; exit 1; }
