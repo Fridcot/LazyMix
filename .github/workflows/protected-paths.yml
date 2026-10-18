@@ -1,0 +1,75 @@
+# Fails a pull request that changes a protected path (scripts/workflow.conf,
+# WF_PROTECTED_PATHS) unless its author is a repository admin. The rules that judge a
+# change — instructions, skills, gates, workflows, ADRs — cannot be rewritten by the
+# change they judge. An admin's pull request passes and still lists what it touched.
+#
+# This workflow runs from the pull request's own copy, so a pull request could edit it;
+# CODEOWNERS on .github/ plus a required code-owner review is what closes that gap.
+name: Protected paths
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  check:
+    name: Protected paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # The base commit supplies the path list, so the change cannot shorten it.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          ACTOR: ${{ github.actor }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPOSITORY/pulls/$NUMBER/files?per_page=100" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)' > changed.txt
+
+          if [[ -x scripts/check-protected-paths.sh ]]; then
+            scripts/check-protected-paths.sh < changed.txt > protected.txt
+          else
+            # The base predates the workflow (the pull request that installs it): every
+            # changed path counts as protected, so only an admin passes.
+            sort -u changed.txt > protected.txt
+          fi
+          # The files endpoint lists at most 3000 files; beyond that nothing is known.
+          if [[ "$CHANGED_FILES" -ge 3000 ]]; then
+            echo "More than 3000 files changed; treated as touching protected paths." >> protected.txt
+          fi
+
+          if [[ ! -s protected.txt ]]; then
+            echo "No protected path changed." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "### Protected paths changed"
+            sed 's/^/- `/; s/$/`/' protected.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The author and whoever triggered this run must both be admins. This sees the
+          # last actor only, not every earlier pusher; CODEOWNERS review covers the rest.
+          # A non-admin reopening or updating an admin's pull request turns this red
+          # until an admin re-runs it — it fails closed.
+          while IFS= read -r user; do
+            permission="$(gh api "repos/$REPOSITORY/collaborators/$user/permission" --jq .permission)"
+            if [[ "$permission" != admin ]]; then
+              echo "::error::$user ($permission) is not an admin and the pull request changes protected paths:"
+              cat protected.txt
+              exit 1
+            fi
+          done < <(printf '%s\n' "$AUTHOR" "$ACTOR" | sort -u)
+          echo "Author and actor are admins; the change is allowed." | tee -a "$GITHUB_STEP_SUMMARY"

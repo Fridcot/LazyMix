@@ -1,0 +1,252 @@
+# AI review of a pull request with Claude, as a separate reviewer from the agent that
+# wrote the change.
+#
+# Security model:
+# - `pull_request_target` runs this file from the base branch, so a pull request cannot
+#   change the workflow, the prompt or the schema that review it.
+# - The head is never checked out or executed; it is fetched as data by collect.sh.
+# - The model session holds no write credential and only Read/Grep/Glob tools.
+# - A separate job without the model posts the review deterministically (submit.sh).
+#
+# Cost controls: drafts skipped, a push cancels the run in progress, forks only on the
+# `ai-review` label, at most AI_REVIEW_MAX_AUTOMATIC automatic passes per pull request,
+# P1-only once AI_REVIEW_SETTLE_AFTER automatic passes exist, Sonnet unless the
+# pull request carries the `security` label.
+#
+# Setup: secret CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`, uses your Claude
+# subscription) or ANTHROPIC_API_KEY (metered). Optional: a GitHub App with
+# "Pull requests: read & write" (vars.AI_REVIEW_APP_CLIENT_ID +
+# secrets.AI_REVIEW_APP_PRIVATE_KEY); without it the review is posted by
+# github-actions[bot], which needs "Allow GitHub Actions to create and approve pull
+# requests" enabled in the repository settings to approve.
+name: AI review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize, labeled]
+
+permissions: {}
+
+concurrency:
+  # A label other than the two this workflow reacts to gets a group of its own, so
+  # labelling a pull request never cancels a pending review.
+  group: >-
+    ai-review-${{ github.event.pull_request.number }}${{
+      github.event.action == 'labeled' && github.event.label.name != 'ai-review' && github.event.label.name != 'security'
+      && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event.action == 'synchronize' }}
+
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      review: ${{ steps.decide.outputs.review }}
+      trigger: ${{ steps.decide.outputs.trigger }}
+      posture: ${{ steps.decide.outputs.posture }}
+      model: ${{ steps.decide.outputs.model }}
+      pass: ${{ steps.decide.outputs.pass }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          MAX_AUTOMATIC: ${{ vars.AI_REVIEW_MAX_AUTOMATIC || '5' }}
+          SETTLE_AFTER: ${{ vars.AI_REVIEW_SETTLE_AFTER || '3' }}
+          DEFAULT_MODEL: ${{ vars.AI_REVIEW_MODEL || 'claude-sonnet-5-5' }}
+          SECURITY_MODEL: ${{ vars.AI_REVIEW_SECURITY_MODEL || 'claude-opus-5-5' }}
+          HAS_CREDENTIAL: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          review=false
+          trigger=automatic
+
+          if [[ "$HAS_CREDENTIAL" != true ]]; then
+            echo "::notice::No CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY secret; the AI review is not configured."
+          elif [[ "$ACTION" == labeled && "$LABEL" == ai-review ]]; then
+            review=true
+            trigger=requested
+          elif [[ "$ACTION" == labeled && "$LABEL" != security ]]; then
+            echo "Label '$LABEL' does not trigger a review."
+          elif [[ "$DRAFT" == true ]]; then
+            echo "Draft pull request; add the ai-review label to review it anyway."
+          elif [[ "$AUTHOR" == "dependabot[bot]" ]]; then
+            echo "Dependabot pull request; not reviewed automatically."
+          elif [[ "$FORK" == true ]]; then
+            echo "Pull request from a fork; a maintainer adds the ai-review label to review it."
+          else
+            review=true
+          fi
+
+          # The trigger of each earlier bot review, read from its last marker: submit.sh
+          # appends the real one after the model's text, which could carry a fake one.
+          markers="$(gh api "repos/$REPOSITORY/pulls/$NUMBER/reviews?per_page=100" --paginate \
+            --jq '[.[] | select(.user.type == "Bot") | ([(.body // "") | match("<!-- ai-review: ([a-z]+) -->"; "g") | .captures[0].string] | last) // empty]' \
+            | jq -s 'add // []')"
+          automatic="$(jq '[.[] | select(. == "automatic")] | length' <<<"$markers")"
+          # The number this review will carry among the AI reviews of the pull request.
+          pass="$(jq 'length + 1' <<<"$markers")"
+          if [[ "$review" == true && "$trigger" == automatic && "$automatic" -ge "$MAX_AUTOMATIC" ]]; then
+            echo "Already $automatic automatic reviews; add the ai-review label to request another."
+            review=false
+          fi
+
+          posture=full
+          if [[ "$automatic" -ge "$SETTLE_AFTER" ]]; then
+            posture=settling
+          fi
+
+          model="$DEFAULT_MODEL"
+          if jq -e 'index("security")' <<<"$LABELS" >/dev/null; then
+            model="$SECURITY_MODEL"
+          fi
+
+          {
+            echo "review=$review"
+            echo "trigger=$trigger"
+            echo "posture=$posture"
+            echo "model=$model"
+            echo "pass=$pass"
+          } >> "$GITHUB_OUTPUT"
+          echo "review=$review trigger=$trigger posture=$posture model=$model automatic=$automatic pass=$pass"
+
+  review:
+    name: Review
+    needs: decide
+    if: needs.decide.outputs.review == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # The base commit, never the head: its AGENTS.md, ADRs and these scripts are what
+      # the change is judged by.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Collect the pull request as data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: .github/ai-review/collect.sh .ai-review-input
+
+      - name: Build the prompt
+        id: prompt
+        env:
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          POSTURE: ${{ needs.decide.outputs.posture }}
+        run: |
+          set -euo pipefail
+          prompt="$(.github/ai-review/build-prompt.sh)"
+          delimiter="PROMPT_$(openssl rand -hex 16)"
+          {
+            echo "prompt<<$delimiter"
+            echo "$prompt"
+            echo "$delimiter"
+            echo "schema=$(jq -c . .github/ai-review/findings-schema.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Start the clock
+        run: date +%s > .ai-review-input/review-started
+
+      - name: Review with Claude
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          # The submit job publishes the review; the action must not post comments itself.
+          classify_inline_comments: 'false'
+          prompt: ${{ steps.prompt.outputs.prompt }}
+          # The deny list, shared with the evaluation runner.
+          settings: .github/ai-review/settings.json
+          claude_args: |
+            --model ${{ needs.decide.outputs.model }}
+            --allowedTools "Read,Grep,Glob"
+            --setting-sources user
+            --json-schema '${{ steps.prompt.outputs.schema }}'
+
+      - name: Keep the findings for the submit job
+        env:
+          FINDINGS: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$FINDINGS" > .ai-review-input/findings.json
+          jq -e '.findings | type == "array"' .ai-review-input/findings.json > /dev/null
+          echo $(( $(date +%s) - $(cat .ai-review-input/review-started) )) > .ai-review-input/duration.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ai-review
+          path: |
+            .ai-review-input/findings.json
+            .ai-review-input/lines.json
+            .ai-review-input/files.json
+            .ai-review-input/truncation.txt
+            .ai-review-input/excluded.txt
+            .ai-review-input/duration.txt
+          retention-days: 7
+
+  submit:
+    name: Submit
+    needs: [decide, review]
+    if: ${{ !cancelled() && needs.review.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Used only when no reviewer App is configured.
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ai-review
+          path: review
+
+      - name: Mint the reviewer App token
+        id: app
+        if: ${{ vars.AI_REVIEW_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.AI_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AI_REVIEW_APP_PRIVATE_KEY }}
+
+      - name: Publish the review
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          TRIGGER: ${{ needs.decide.outputs.trigger }}
+          MODEL: ${{ needs.decide.outputs.model }}
+          POSTURE: ${{ needs.decide.outputs.posture }}
+          PASS: ${{ needs.decide.outputs.pass }}
+          METRICS_FILE: ai-review-metrics.json
+        run: .github/ai-review/submit.sh review/findings.json review
+
+      # Numbers only, never model text: what scripts/summarize-metrics.sh reads.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ai-review-metrics
+          path: ai-review-metrics.json
+          retention-days: 90

@@ -1,0 +1,11 @@
+# Changes to the rules that judge changes need the owner's review.
+# With collaborators and "Require review from Code Owners", uncomment the catch-all so
+# every change needs a human code owner.
+# *            @Fridcot
+/.github/      @Fridcot
+/.agents/      @Fridcot
+/.claude/      @Fridcot
+/scripts/      @Fridcot
+/docs/decisions/ @Fridcot
+AGENTS.md      @Fridcot
+CLAUDE.md      @Fridcot

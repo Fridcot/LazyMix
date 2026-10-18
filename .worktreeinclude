@@ -1,0 +1,5 @@
+# Gitignored files copied into every new worktree Claude Code creates.
+.env
+.env.local
+*.local.md
+.claude/settings.local.json

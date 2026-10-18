@@ -1,0 +1,51 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "covered", "findings"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "Two to four sentences: what the change does and the overall verdict. No praise."
+    },
+    "covered": {
+      "type": "array",
+      "description": "Every changed path that was actually read in this pass.",
+      "items": { "type": "string" }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "path", "line", "start_line", "title", "impact", "correction", "rule"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["P1", "P2", "P3"],
+            "description": "P1: the change is wrong (incorrect behavior, security or data loss, docs contradicting code). P2: a repository rule requires it. P3: a cost paid later."
+          },
+          "path": {
+            "type": ["string", "null"],
+            "description": "Changed file the finding sits on, or null when it belongs to no file."
+          },
+          "line": {
+            "type": ["integer", "null"],
+            "description": "Head-side line number; must be a line listed for the path in lines.json."
+          },
+          "start_line": {
+            "type": ["integer", "null"],
+            "description": "First line of a multi-line range in the same hunk as line (see lines.json), or null."
+          },
+          "title": { "type": "string", "description": "One line naming the defect." },
+          "impact": { "type": "string", "description": "The concrete input or state and the wrong result." },
+          "correction": { "type": "string", "description": "The smallest change that fixes it." },
+          "rule": {
+            "type": "string",
+            "description": "Where the obligation comes from: file and section (AGENTS.md § ..., an ADR, a rubric), or the word correctness."
+          }
+        }
+      }
+    }
+  }
+}

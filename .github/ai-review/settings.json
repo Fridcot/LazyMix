@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash", "Edit", "Write", "WebFetch", "WebSearch", "mcp__*",
+      "Read(//proc/**)", "Read(//**/.git/**)", "Read(//**/.claude/**)",
+      "Read(//**/.ssh/**)", "Read(//**/.npmrc)", "Read(//**/.netrc)",
+      "Read(//home/runner/work/_temp/**)", "Read(//home/runner/.*/**)", "Read(~/.*/**)",
+      "Read(//tmp/**)", "Read(//etc/**)", "Read(//root/**)", "Read(//opt/**)"
+    ]
+  }
+}

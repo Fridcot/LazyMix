@@ -35,6 +35,12 @@ aspire run
 The Aspire dashboard link is printed in the terminal. Spotify configuration will be documented
 once authentication lands.
 
+## Development
+
+Changes follow an agent-driven workflow: an issue, a branch, local gates
+(`scripts/verify-fast.sh`), a self-review and an independent review, then a pull request.
+See [AGENTS.md](AGENTS.md) and [docs/operations/agent-workflow.md](docs/operations/agent-workflow.md).
+
 ## License
 
 [MIT](LICENSE)

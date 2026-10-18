@@ -1,0 +1,40 @@
+# No labels here on purpose: an issue without a type:* label is untriaged.
+name: Work item
+description: A feature, refactoring, workflow or documentation change.
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this work exists. Link ADRs, docs and related issues; do not copy them.
+    validations:
+      required: true
+  - type: textarea
+    id: stories
+    attributes:
+      label: User stories
+      description: Two or three stories.
+      value: |
+        - As a ..., I want ..., so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: Observable outcomes that make this done.
+      value: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What a reader might expect that this issue does not do.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Issues this waits on and why. Also record each one as a "blocked by" relation.
+      value: None.
