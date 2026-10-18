@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LazyMix.Api/LazyMix.Api.csproj" />
+    <Project Path="src/LazyMix.AppHost/LazyMix.AppHost.csproj" />
+    <Project Path="src/LazyMix.Data/LazyMix.Data.csproj" />
+    <Project Path="src/LazyMix.MigrationService/LazyMix.MigrationService.csproj" />
+    <Project Path="src/LazyMix.ServiceDefaults/LazyMix.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LazyMix.Tests/LazyMix.Tests.csproj" />
+  </Folder>
+</Solution>
