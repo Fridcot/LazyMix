@@ -21,9 +21,10 @@ context that work must respect, and a brief that says `safe` or `blocked`.
      (`git worktree add ../<repo>-<short-description> -b agent/<short-description>`) or a
      branch, and continue there.
    - Never rename any other branch; it belongs to the developer.
-3. **Base.** Fetch the base (`git fetch <remote> main`) and run the inspection again.
-   Continue only when `Contains base branch: yes` (or `unknown` in a repository with no
-   remote). Otherwise rebase first.
+3. **Base.** Run `scripts/inspect-workspace.sh --fetch`: it fetches the configured base
+   (`WF_BASE_BRANCH`) into its tracking ref the way the gates do, then inspects again.
+   `Base fetch: failed` means `blocked`. Continue only when `Contains base branch: yes`
+   (or `unknown` in a repository with no remote). Otherwise rebase first.
 4. **Dirty tree.** If `Working tree` is dirty, run `git status --short --untracked-files=all`
    and inventory every path. Return `blocked` until the user approves what happens to each
    one. Never assume existing changes are unrelated, and never discard them.
