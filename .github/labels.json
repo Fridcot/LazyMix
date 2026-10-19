@@ -6,6 +6,7 @@
   {"name": "type:feature", "color": "a2eeef", "description": "Everything else, refactoring included"},
   {"name": "security", "color": "b60205", "description": "Needs a security review; AI review uses the stronger model"},
   {"name": "blocked", "color": "000000", "description": "Waits on something outside the project"},
+  {"name": "agent:queue", "color": "ededed", "description": "Waits for the local task queue to take it"},
   {"name": "agent:claude", "color": "d4c5f9", "description": "An agent session started this work"},
   {"name": "ai-review", "color": "c2e0c6", "description": "Request an AI review of this pull request"}
 ]

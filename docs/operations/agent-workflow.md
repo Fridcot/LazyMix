@@ -15,8 +15,12 @@ every agent runtime: skills are in `.agents/skills/`, and `.claude/skills` links
 | Finish (user-invoked) | `/finish-change` | independent review, commit, push, pull request, acceptance ticked |
 | CI | `Required CI`, `Protected paths` | required checks |
 | AI review | `AI review` workflow | APPROVE or COMMENT with findings |
-| Merge | the owner | issue closed by `Closes #N` |
+| Merge | the owner, squash merge only | one commit on the base branch; issue closed by `Closes #N` |
 | Retrospective (user-invoked, now and then) | `/retro` | issues proposing rule changes, each citing its evidence |
+
+`scripts/run-queue.sh` runs Start to Self-review unattended for each issue labelled
+`agent:queue`, one at a time, each in its own worktree; with `WF_QUEUE_FINISH=true` it
+also runs Finish.
 
 ## Scripts
 
@@ -32,6 +36,7 @@ every agent runtime: skills are in `.agents/skills/`, and `.claude/skills` links
 | `check-workflow-contracts.sh` | yes (CI) | Contracts on the process files themselves |
 | `check-protected-paths.sh` | — | Which changed paths are protected |
 | `summarize-metrics.sh` | no | Summarises the gate run log and the AI review metrics (`--fetch <n>` downloads the latest) |
+| `run-queue.sh` | no | Works the `agent:queue` issues one at a time: claims one, creates its worktree, runs headless Claude Code there, comments the outcome; stops at the first failed run |
 | `collect-retro-evidence.sh` | no | The evidence `/retro` reads: gate runs, review metrics and review threads for each of `WF_RETRO_REPOSITORIES` |
 
 All of them read `scripts/workflow.conf`.

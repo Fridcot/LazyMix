@@ -47,11 +47,13 @@ Do not continue past a failing gate.
 3. Fetch the base again. If it moved, rebase and repeat the affected gates.
 4. Push the branch (`git push -u origin HEAD`).
 5. Open the pull request with `gh pr create`, following
-   `.github/PULL_REQUEST_TEMPLATE.md`. The body contains `Closes #<issue>` for the issue
+   `.github/PULL_REQUEST_TEMPLATE.md`. Its title is a Conventional Commits subject:
+   pull requests are merged by squash only, so the title becomes the subject of the
+   commit on the base branch. The body contains `Closes #<issue>` for the issue
    the change completes and states any breaking change with the action a user must take.
    Under `## Verification` it lists every unmet acceptance item with the reason. If the
-   branch already has an open pull request, update its body instead
-   (`gh pr edit --body-file`), keeping `Closes #<issue>`.
+   branch already has an open pull request, update its title and body instead
+   (`gh pr edit --title <subject> --body-file <file>`), keeping `Closes #<issue>`.
 6. Confirm `Closes #<issue>` is present in the published body
    (`gh pr view --json body`).
 7. Record the acceptance verdicts in the issue. Save the body to a `mktemp` file outside

@@ -12,6 +12,7 @@ one with `Closes #<number>`.
 | What kind of work is it? | exactly one `type:*` label |
 | What does it wait on? | GitHub issue dependencies (`blocked by`), explained in `## Dependencies` |
 | Which release ships it? | milestone (optional) |
+| Should the task queue take it? | `agent:queue` label (removed when the queue takes it) |
 | Has an agent taken it? | `agent:claude` label |
 | Is it done? | closed by the merged pull request |
 | What did it deliver? | acceptance items ticked by `/finish-change` |
@@ -32,7 +33,8 @@ ordering between two issues — that is a dependency).
 Flags: `security` (the change needs a security review; the AI review then uses the
 stronger model), `blocked` (waits on something outside the project), `agent:claude`
 (applied when an agent session starts the work; never removed), `ai-review` (on a pull
-request: request an AI review now).
+request: request an AI review now), `agent:queue` (the local task queue,
+`scripts/run-queue.sh`, takes the issue when it has no open blocker).
 
 `install.sh --labels` in the agentic-workflow repository creates these labels.
 
