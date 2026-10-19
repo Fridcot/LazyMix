@@ -34,7 +34,9 @@ Flags: `security` (the change needs a security review; the AI review then uses t
 stronger model), `blocked` (waits on something outside the project), `agent:claude`
 (applied when an agent session starts the work; never removed), `ai-review` (on a pull
 request: request an AI review now), `agent:queue` (the local task queue,
-`scripts/run-queue.sh`, takes the issue when it has no open blocker).
+`scripts/run-queue.sh`, takes the issue when it has no open blocker, the label was added
+by a login in `WF_QUEUE_TRUSTED_ACTORS` and the title and body were not edited after
+that).
 
 `install.sh --labels` in the agentic-workflow repository creates these labels.
 

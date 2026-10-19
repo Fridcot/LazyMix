@@ -41,6 +41,7 @@ WF_PULL_REQUEST_TARGET_WORKFLOWS=()
 WF_REVIEW_EXCLUDE=()
 WF_RETRO_REPOSITORIES=()
 WF_QUEUE_LABEL="agent:queue"
+WF_QUEUE_TRUSTED_ACTORS=()
 WF_QUEUE_MODEL=opus
 WF_QUEUE_CLAUDE_ARGS=(--permission-mode auto)
 WF_QUEUE_TIMEOUT=2h
@@ -208,10 +209,17 @@ wf_require_not_base_branch() {
   fi
 }
 
+# wf_fetch_base <remote>
+# Fetches the base branch into its tracking ref with an explicit destination refspec, so
+# a stale tracking ref cannot hide remote movement (a bare `git fetch <remote> <base>`
+# only updates FETCH_HEAD when the remote's refspec does not cover the base).
+wf_fetch_base() {
+  git fetch --quiet "$1" "+refs/heads/$WF_BASE_BRANCH:refs/remotes/$1/$WF_BASE_BRANCH"
+}
+
 # wf_require_base_contained <required: true|false>
-# Fetches the base branch into its tracking ref (an explicit destination refspec, so a
-# stale tracking ref cannot hide remote movement) and requires HEAD to contain it.
-# A checkout with no base remote fails when required and continues otherwise.
+# Fetches the base branch into its tracking ref (wf_fetch_base) and requires HEAD to
+# contain it. A checkout with no base remote fails when required and continues otherwise.
 wf_require_base_contained() {
   local required="$1" remote
   remote="$(wf_base_remote)"
@@ -222,7 +230,7 @@ wf_require_base_contained() {
     wf_info "No base remote resolves; skipping the base check."
     return 0
   fi
-  if ! git fetch --quiet "$remote" "+refs/heads/$WF_BASE_BRANCH:refs/remotes/$remote/$WF_BASE_BRANCH"; then
+  if ! wf_fetch_base "$remote"; then
     wf_fail "could not fetch $remote/$WF_BASE_BRANCH. An unreachable base is a blocked gate, not a pass."
   fi
   if ! git merge-base --is-ancestor "$remote/$WF_BASE_BRANCH" HEAD; then

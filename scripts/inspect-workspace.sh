@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
-# Read-only workspace preflight. Prints one "Key: value" line per fact; changes nothing
-# (it does not fetch, so "Contains base branch" is against the last fetched base).
+# Workspace preflight. Prints one "Key: value" line per fact. Without --fetch it changes
+# nothing, so "Contains base branch" is against the last fetched base.
+#
+# Usage: inspect-workspace.sh [--fetch]
+#   --fetch  first fetch WF_BASE_BRANCH into its tracking ref the way the gates do (the
+#            only write it makes); "Base fetch" reports the outcome
 set -euo pipefail
 
 # shellcheck source=lib/workflow.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/workflow.sh"
 
+fetch=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --fetch) fetch=true; shift ;;
+    *) wf_fail "unknown argument: $1 (usage: inspect-workspace.sh [--fetch])" ;;
+  esac
+done
+
 cd "$WF_ROOT"
+
+fetched="not requested"
+if [[ "$fetch" == true ]]; then
+  remote="$(wf_base_remote)"
+  if [[ -z "$remote" ]]; then
+    fetched="skipped (no base remote resolves)"
+  elif wf_fetch_base "$remote"; then
+    fetched="$remote/$WF_BASE_BRANCH"
+  else
+    fetched="failed ($remote/$WF_BASE_BRANCH)"
+  fi
+fi
 
 branch="$(wf_current_branch)"
 
@@ -55,6 +79,7 @@ printf 'Branch: %s\n' "$branch"
 printf 'Branch kind: %s\n' "$branch_kind"
 printf 'Worktree: %s\n' "$worktree"
 printf 'Upstream: %s\n' "$upstream"
+printf 'Base fetch: %s\n' "$fetched"
 printf 'Base branch: %s\n' "${base:-unresolved}"
 printf 'Contains base branch: %s\n' "$contains"
 printf 'Working tree: %s\n' "$tree"

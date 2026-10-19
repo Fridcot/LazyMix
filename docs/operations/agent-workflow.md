@@ -20,13 +20,19 @@ every agent runtime: skills are in `.agents/skills/`, and `.claude/skills` links
 
 `scripts/run-queue.sh` runs Start to Self-review unattended for each issue labelled
 `agent:queue`, one at a time, each in its own worktree; with `WF_QUEUE_FINISH=true` it
-also runs Finish.
+also runs Finish. It takes only an issue whose newest `agent:queue` label was added by a
+login in `WF_QUEUE_TRUSTED_ACTORS` (default: the repository owner) and whose title and
+body were not edited after that; any other queued issue is skipped with a comment and
+keeps its label. The agent gets the checked title and body in its prompt and stops as
+`blocked` if the issue no longer matches them, and a run whose issue changed before
+`/finish-change` is not finished. Comments, linked pages and the run's own access to the
+machine are not covered by these checks.
 
 ## Scripts
 
 | Script | Gates? | What it does |
 |---|---|---|
-| `inspect-workspace.sh` | no | Read-only facts: branch, worktree, base, dirty tree, SDK |
+| `inspect-workspace.sh` | no | Facts: branch, worktree, base, dirty tree, SDK. Read-only unless `--fetch`, which first fetches the base the way the gates do |
 | `verify-fast.sh` | yes | Local gate (see `AGENTS.md`) |
 | `verify-full.sh` | yes | Local copy of CI; optional |
 | `run-stack.sh` | — | The build/test commands for one stack (`dotnet`, `frontend`, `custom`); used by both gates and CI |
@@ -36,7 +42,7 @@ also runs Finish.
 | `check-workflow-contracts.sh` | yes (CI) | Contracts on the process files themselves |
 | `check-protected-paths.sh` | — | Which changed paths are protected |
 | `summarize-metrics.sh` | no | Summarises the gate run log and the AI review metrics (`--fetch <n>` downloads the latest) |
-| `run-queue.sh` | no | Works the `agent:queue` issues one at a time: claims one, creates its worktree, runs headless Claude Code there, comments the outcome; stops at the first failed run |
+| `run-queue.sh` | no | Works the `agent:queue` issues one at a time: checks who labelled one and that it was not edited since, claims it, creates its worktree, runs headless Claude Code there on the checked text, comments the outcome; stops at the first failed run. `--clean` removes the worktree and local branch of each run whose work is in the base or a merged pull request, and lists the unmerged or dirty ones it keeps |
 | `collect-retro-evidence.sh` | no | The evidence `/retro` reads: gate runs, review metrics and review threads for each of `WF_RETRO_REPOSITORIES` |
 
 All of them read `scripts/workflow.conf`.
